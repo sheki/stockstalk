@@ -110,7 +110,7 @@ func analysis(confFile string) error {
 }
 
 func sendEmail(body string) error {
-	mg := mailgun.NewMailgun("", "")
+	mg := mailgun.NewMailgun("", "", "")
 	_, _, err := mg.Send(mg.NewMessage(
 		/* From */ "investment@sheki.in",
 		/* Subject */ fmt.Sprintf("Investment Report - %s", time.Now().Format(humanDate)),
@@ -129,8 +129,16 @@ func printAnalysis(writer io.Writer, conf config) {
 		if history == nil {
 			continue
 		}
+		seen := make(map[string]struct{})
 		for i := len(history) - 1; i >= 0; i-- {
-			fmt.Fprintf(writer, "%s %.2f %%\n", history[i].Date.Format(humanDate), history[i].CompoundInterest)
+			h := history[i]
+			dateStr := h.Date.Format(humanDate)
+			_, ok := seen[dateStr]
+			if ok {
+				continue
+			}
+			fmt.Fprintf(writer, "%s %.2f %%\n", dateStr, h.CompoundInterest)
+			seen[dateStr] = struct{}{}
 		}
 		fmt.Fprintf(writer, "\n")
 	}
