@@ -1,16 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"math"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/mailgun/mailgun-go"
 	"github.com/vic3lord/stocks"
 )
 
@@ -45,6 +49,7 @@ func main() {
 	flag.Parse()
 
 	if *add != "" {
+		fmt.Println("adding", *add)
 		perr(addInvestment(*add, *config))
 		return
 	}
@@ -76,7 +81,7 @@ func analysis(confFile string) error {
 		}
 		p, err := stock.GetPrice()
 		if err != nil {
-			return err
+			return errors.New(fmt.Sprintf("cannot get price for %s %s", i.Symbol, err.Error()))
 		}
 		r := currentRate(i, p)
 		perf := performance{
@@ -94,22 +99,40 @@ func analysis(confFile string) error {
 		return err
 	}
 
-	printAnalysis(conf)
-	return nil
+	printAnalysis(os.Stdout, conf)
+	var bu bytes.Buffer
+	printAnalysis(&bu, conf)
+	b, err := ioutil.ReadAll(&bu)
+	if err != nil {
+		return err
+	}
+	return sendEmail(string(b))
+}
+
+func sendEmail(body string) error {
+	mg := mailgun.NewMailgun("", "")
+	_, _, err := mg.Send(mg.NewMessage(
+		/* From */ "investment@sheki.in",
+		/* Subject */ fmt.Sprintf("Investment Report - %s", time.Now().Format(humanDate)),
+		/* Body */ body,
+		/* To */ "abhishek.kona@gmail.com", "abhishek.kona@sheki.in",
+	))
+	return err
 }
 
 const humanDate = "02-Jan-06"
 
-func printAnalysis(conf config) {
+func printAnalysis(writer io.Writer, conf config) {
 	for _, v := range conf.Investments {
 		history := conf.History[v.Symbol]
-		fmt.Printf("%s %f %s\n", v.Symbol, v.Total, v.Date.Format(humanDate))
+		fmt.Fprintf(writer, "===%s %.2f %s ===\n", v.Symbol, v.Total, v.Date.Format(humanDate))
 		if history == nil {
 			continue
 		}
 		for i := len(history) - 1; i >= 0; i-- {
-			fmt.Printf("%s %.2f\n", history[i].Date.Format(humanDate), history[i].CompoundInterest)
+			fmt.Fprintf(writer, "%s %.2f %%\n", history[i].Date.Format(humanDate), history[i].CompoundInterest)
 		}
+		fmt.Fprintf(writer, "\n")
 	}
 }
 
