@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mailgun/mailgun-go"
-	"github.com/vic3lord/stocks"
+	"github.com/doneland/yquotes"
+	mailgun "github.com/mailgun/mailgun-go"
 )
 
 type config struct {
@@ -75,20 +75,16 @@ func analysis(confFile string) error {
 		conf.History = make(map[string][]performance)
 	}
 	for _, i := range conf.Investments {
-		stock, err := stocks.GetQuote(i.Symbol)
+		price, err := yquotes.GetPrice(i.Symbol)
 		if err != nil {
 			return err
 		}
-		p, err := stock.GetPrice()
-		if err != nil {
-			return errors.New(fmt.Sprintf("cannot get price for %s %s", i.Symbol, err.Error()))
-		}
-		r := currentRate(i, p)
+		r := currentRate(i, price.Last)
 		perf := performance{
 			Symbol:           i.Symbol,
 			Date:             time.Now(),
 			CompoundInterest: r,
-			Price:            p,
+			Price:            price.Last,
 		}
 		hPerf := conf.History[i.Symbol]
 		hPerf = append(hPerf, perf)
@@ -109,14 +105,19 @@ func analysis(confFile string) error {
 	return sendEmail(string(b))
 }
 
+const publicAPIKey = ""
+
+const apiKey = ""
+
 func sendEmail(body string) error {
-	mg := mailgun.NewMailgun("", "", "")
-	_, _, err := mg.Send(mg.NewMessage(
+	mg := mailgun.NewMailgun("sheki.in", apiKey, publicAPIKey)
+	resp, _, err := mg.Send(mg.NewMessage(
 		/* From */ "investment@sheki.in",
 		/* Subject */ fmt.Sprintf("Investment Report - %s", time.Now().Format(humanDate)),
 		/* Body */ body,
 		/* To */ "abhishek.kona@gmail.com", "abhishek.kona@sheki.in",
 	))
+	fmt.Println(resp)
 	return err
 }
 
